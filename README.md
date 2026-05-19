@@ -36,13 +36,35 @@ curl http://localhost:8000/health
 curl -X POST http://localhost:8000/reset-filters
 ```
 
-Response:
+Status codes:
+
+| Code | `status` | Meaning |
+|------|----------|---------|
+| 200 | `success` | All discovered fans reset successfully |
+| 200 | `no_devices` | Login succeeded but no air purifiers were discovered |
+| 207 | `partial` | At least one fan reset and at least one failed (per-device detail in `results`) |
+| 401 | — | VeSync login failed |
+| 500 | — | Missing `VESYNC_EMAIL` / `VESYNC_PASSWORD` env vars |
+| 502 | `error` | Every discovered fan failed to reset |
+
+All-success response (200):
 ```json
 {
   "status": "success",
   "results": [
     {"device": "Living Room Fan", "reset": true},
     {"device": "Bedroom Fan", "reset": true}
+  ]
+}
+```
+
+Partial-failure response (207):
+```json
+{
+  "status": "partial",
+  "results": [
+    {"device": "Living Room Fan", "reset": true},
+    {"device": "Bedroom Fan", "reset": false, "error": "device offline"}
   ]
 }
 ```

@@ -1,5 +1,6 @@
 import os
 from fastapi import FastAPI, HTTPException
+from fastapi.responses import JSONResponse
 from pyvesync.vesync import VeSync
 
 app = FastAPI(title="VeSync Filter Reset API")
@@ -19,25 +20,39 @@ async def reset_filters():
     if not EMAIL or not PASSWORD:
         raise HTTPException(status_code=500, detail="Missing VESYNC_EMAIL or VESYNC_PASSWORD")
 
-    results = []
-
     async with VeSync(
         username=EMAIL,
         password=PASSWORD,
         country_code="US",
         time_zone=TIMEZONE,
-        redact=True
+        redact=True,
     ) as manager:
         if not await manager.login():
             raise HTTPException(status_code=401, detail="VeSync login failed")
 
         await manager.update()
 
-        for fan in manager.devices.air_purifiers:
+        fans = manager.devices.air_purifiers
+        if not fans:
+            return JSONResponse(
+                status_code=200,
+                content={"status": "no_devices", "results": []},
+            )
+
+        results = []
+        for fan in fans:
             try:
                 await fan.reset_filter()
                 results.append({"device": fan.device_name, "reset": True})
             except Exception as e:
                 results.append({"device": fan.device_name, "reset": False, "error": str(e)})
 
-    return {"status": "success", "results": results}
+    succeeded = sum(1 for r in results if r["reset"])
+    failed = len(results) - succeeded
+
+    if failed == 0:
+        return JSONResponse(status_code=200, content={"status": "success", "results": results})
+    if succeeded == 0:
+        # Every device failed — treat as upstream failure.
+        return JSONResponse(status_code=502, content={"status": "error", "results": results})
+    return JSONResponse(status_code=207, content={"status": "partial", "results": results})
